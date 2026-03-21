@@ -1,0 +1,40 @@
+spring:
+  application:
+    name: wms-new
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/wms?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
+    username: root
+    password: root
+  sql:
+    init:
+      # 【开发/演示专用】自动建表 + 自动灌模拟数据（可直接打开页面看效果）
+      # - 如果你要接入真实数据：把下面 mode 改为 never（并建议删除 data-locations）
+      # - 或者仅关闭灌数：保留 mode=always，但把 data-locations 注释/删除
+      mode: always
+      encoding: utf-8
+      schema-locations:
+        - classpath:sql/00_wms_reset_for_mock.sql
+        - classpath:sql/01_wms_schema.sql
+        - classpath:sql/14_wms_auth.sql
+        - classpath:sql/04_wms_platform_and_replenishment.sql
+        - classpath:sql/05_wms_warehouse_and_orders.sql
+        - classpath:sql/07_wms_store_kpi_finance_marketing_auth.sql
+        - classpath:sql/11_wms_inventory_change.sql
+        - classpath:sql/13_wms_pricing_and_new_product.sql
+        - classpath:sql/02_wms_views.sql
+        - classpath:sql/06_wms_analytics_views.sql
+        - classpath:sql/08_wms_kpi_finance_views.sql
+        - classpath:sql/09_wms_slow_moving_and_loss_views.sql
+        - classpath:sql/12_wms_inventory_change_views.sql
+        - classpath:sql/99_auto_crud.sql
+        # 注意：包含 DELIMITER/存储过程/函数的脚本，Spring 自动初始化不支持（会按 ; 拆语句导致失败）
+        # 如需这些对象，请手动执行：sql/03_wms_functions_and_materialized.sql
+      data-locations:
+        - classpath:sql/10_wms_mock_data.sql
+  web:
+    resources:
+      cache:
+        period: 0
+server:
+  port: 8081

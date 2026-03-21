@@ -1,0 +1,23 @@
+spring:
+  sql:
+    init:
+      mode: always
+      encoding: utf-8
+      schema-locations:
+        - classpath:sql/00_wms_reset_for_mock.sql
+        - classpath:sql/01_wms_schema.sql
+        - classpath:sql/14_wms_auth.sql
+        - classpath:sql/04_wms_platform_and_replenishment.sql
+        - classpath:sql/05_wms_warehouse_and_orders.sql
+        - classpath:sql/07_wms_store_kpi_finance_marketing_auth.sql
+        - classpath:sql/11_wms_inventory_change.sql
+        - classpath:sql/13_wms_pricing_and_new_product.sql
+        - classpath:sql/02_wms_views.sql
+        - classpath:sql/06_wms_analytics_views.sql
+        - classpath:sql/08_wms_kpi_finance_views.sql
+        - classpath:sql/09_wms_slow_moving_and_loss_views.sql
+        - classpath:sql/12_wms_inventory_change_views.sql
+        # 注意：包含 DELIMITER/存储过程/函数的脚本，Spring 自动初始化不支持（会按 ; 拆语句导致失败）
+        # 如需这些对象，请手动执行：sql/03_wms_functions_and_materialized.sql
+      data-locations:
+        - classpath:sql/10_wms_mock_data.sql

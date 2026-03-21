@@ -1,0 +1,901 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>WMS Demo Console</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/app.css"/>
+</head>
+<body class="bg-light">
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+  <div class="container-fluid">
+    <a class="navbar-brand" href="#">WMS Demo Console</a>
+    <span id="nav-readonly-hint" class="badge bg-secondary d-none">只读账号（无写入权限）</span>
+    <div class="navbar-text text-secondary d-none d-md-inline small">平台切换 / 业务看板</div>
+    <div class="ms-auto d-flex align-items-center gap-2 flex-wrap">
+      <span class="text-secondary small">平台</span>
+      <select class="form-select form-select-sm" id="sel-platform" style="width: 180px"></select>
+      <form method="post" action="/logout" class="m-0">
+        <button type="submit" class="btn btn-outline-light btn-sm">退出登录</button>
+      </form>
+    </div>
+  </div>
+</nav>
+
+<!-- 顶部分组菜单（替代左侧列表） -->
+<div class="app-top-menu border-bottom bg-white shadow-sm">
+  <div class="container-fluid px-2 px-lg-3">
+    <ul class="nav nav-pills flex-wrap py-2 align-items-center gap-1 small" id="top-app-nav">
+      <li class="nav-item dropdown">
+        <a class="nav-link dropdown-toggle py-1 px-2" href="#" data-bs-toggle="dropdown" role="button" aria-expanded="false">商品</a>
+        <ul class="dropdown-menu">
+          <li><button type="button" class="dropdown-item" data-view="products">商品</button></li>
+          <li><button type="button" class="dropdown-item" data-view="variants">商品变体</button></li>
+          <li><button type="button" class="dropdown-item" data-view="new-products">新品上架</button></li>
+        </ul>
+      </li>
+      <li class="nav-item dropdown">
+        <a class="nav-link dropdown-toggle py-1 px-2" href="#" data-bs-toggle="dropdown" role="button" aria-expanded="false">店铺</a>
+        <ul class="dropdown-menu">
+          <li><button type="button" class="dropdown-item" data-view="stores">店铺</button></li>
+          <li><button type="button" class="dropdown-item" data-view="store-kpi">店铺KPI</button></li>
+        </ul>
+      </li>
+      <li class="nav-item dropdown">
+        <a class="nav-link dropdown-toggle py-1 px-2" href="#" data-bs-toggle="dropdown" role="button" aria-expanded="false">库存</a>
+        <ul class="dropdown-menu">
+          <li><button type="button" class="dropdown-item" data-view="inventory-change">库存变动</button></li>
+          <li><button type="button" class="dropdown-item" data-view="warehouse-list">现有仓库</button></li>
+          <li><button type="button" class="dropdown-item" data-view="warehouse-snapshot">多仓库库存快照</button></li>
+        </ul>
+      </li>
+      <li class="nav-item dropdown">
+        <a class="nav-link dropdown-toggle py-1 px-2" href="#" data-bs-toggle="dropdown" role="button" aria-expanded="false">利润</a>
+        <ul class="dropdown-menu">
+          <li><button type="button" class="dropdown-item" data-view="rank-profit">利润排行榜</button></li>
+          <li><button type="button" class="dropdown-item" data-view="profit-table">商品利润表</button></li>
+          <li><button type="button" class="dropdown-item" data-view="loss">负利润看板</button></li>
+        </ul>
+      </li>
+      <li class="nav-item dropdown">
+        <a class="nav-link dropdown-toggle py-1 px-2" href="#" data-bs-toggle="dropdown" role="button" aria-expanded="false">调价</a>
+        <ul class="dropdown-menu">
+          <li><button type="button" class="dropdown-item" data-view="price-todos">调价待办</button></li>
+          <li><button type="button" class="dropdown-item" data-view="price-history">调价记录</button></li>
+        </ul>
+      </li>
+      <li class="nav-item">
+        <button type="button" class="nav-link py-1 px-2 btn btn-link text-decoration-none text-dark border-0" data-view="rank-sales">销量排行</button>
+      </li>
+      <li class="nav-item">
+        <button type="button" class="nav-link py-1 px-2 btn btn-link text-decoration-none text-dark border-0" data-view="slow">滞销&动销率</button>
+      </li>
+      <li class="nav-item">
+        <button type="button" class="nav-link py-1 px-2 btn btn-link text-decoration-none text-dark border-0" data-view="orders">订单</button>
+      </li>
+      <li class="nav-item">
+        <button type="button" class="nav-link py-1 px-2 btn btn-link text-decoration-none text-dark border-0" data-view="admin-usage">使用统计</button>
+      </li>
+      <li class="nav-item">
+        <button type="button" class="nav-link py-1 px-2 btn btn-link text-decoration-none text-dark border-0" data-view="account-admin">账号权限</button>
+      </li>
+      <li class="nav-item dropdown">
+        <a class="nav-link dropdown-toggle py-1 px-2" href="#" data-bs-toggle="dropdown" role="button" aria-expanded="false">其它</a>
+        <ul class="dropdown-menu">
+          <li><button type="button" class="dropdown-item" data-view="crud-admin">CRUD数据管理</button></li>
+          <li><button type="button" class="dropdown-item" data-view="bi">BI趋势</button></li>
+          <li><button type="button" class="dropdown-item" data-view="sql">SQL脚本</button></li>
+        </ul>
+      </li>
+    </ul>
+  </div>
+</div>
+
+<div class="container-fluid py-3 px-2 px-lg-3">
+  <div class="alert alert-info small py-2 mb-3">
+    建议用 <code>dev</code> profile 运行以自动建表并导入模拟数据：
+    <code>SPRING_PROFILES_ACTIVE=dev</code>
+  </div>
+  <div class="row g-3">
+    <div class="col-12">
+      <div id="view-products" class="view card shadow-sm">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between">
+            <h5 class="mb-0">商品</h5>
+            <button class="btn btn-sm btn-outline-primary" id="btn-refresh-products">刷新</button>
+          </div>
+          <hr/>
+          <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle">
+              <thead><tr><th>ID</th><th>Code</th><th>Name</th><th>Status</th></tr></thead>
+              <tbody id="tbl-products"></tbody>
+            </table>
+          </div>
+
+        </div>
+      </div>
+
+      <div id="view-variants" class="view card shadow-sm d-none">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between">
+            <h5 class="mb-0">商品变体（SKU）</h5>
+            <button class="btn btn-sm btn-outline-primary" id="btn-refresh-variants">刷新</button>
+          </div>
+          <hr/>
+          <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle">
+              <thead><tr><th>ID</th><th>SKU</th><th>Title</th><th>Price</th><th>操作</th></tr></thead>
+              <tbody id="tbl-skus"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div id="view-stores" class="view card shadow-sm d-none">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between">
+            <h5 class="mb-0">店铺（含密钥签发）</h5>
+            <button class="btn btn-sm btn-outline-primary" id="btn-refresh-stores">刷新</button>
+          </div>
+          <hr/>
+          <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle">
+              <thead><tr><th>ID</th><th>Code</th><th>Name</th><th>操作</th></tr></thead>
+              <tbody id="tbl-stores"></tbody>
+            </table>
+          </div>
+          <div class="mt-3 small text-secondary">
+            说明：点击“签发密钥”会返回 <code>keyId</code> + <code>secret</code>（secret 只展示一次），数据库只保存 hash。
+          </div>
+          <pre class="mt-3 p-3 bg-body-tertiary rounded border small d-none" id="issued-key"></pre>
+        </div>
+      </div>
+
+      <!-- 店铺KPI：复用 view-ops -->
+
+      <div id="view-inventory-change" class="view card shadow-sm d-none">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between">
+            <h5 class="mb-0">库存变动</h5>
+            <div class="d-flex gap-2 align-items-center">
+              <select class="form-select form-select-sm" id="sel-store" style="width: 220px"></select>
+              <button class="btn btn-sm btn-outline-primary" id="btn-refresh-inventory">刷新</button>
+            </div>
+          </div>
+          <hr/>
+          <ul class="nav nav-pills nav-pills-sm mb-3" id="inv-change-tabs">
+            <li class="nav-item"><button class="nav-link active" data-tab="pending" type="button">待分配库存</button></li>
+            <li class="nav-item"><button class="nav-link" data-tab="allocated" type="button">已分配库存</button></li>
+            <li class="nav-item"><button class="nav-link" data-tab="sync" type="button">同步记录</button></li>
+            <li class="nav-item"><button class="nav-link" data-tab="clear" type="button">清零记录</button></li>
+            <li class="nav-item"><button class="nav-link" data-tab="snapshot" type="button">库存快照</button></li>
+            <li class="nav-item"><button class="nav-link" data-tab="purchase" type="button">采购单</button></li>
+            <li class="nav-item"><button class="nav-link" data-tab="transfer" type="button">调拨单</button></li>
+          </ul>
+
+          <div id="inv-tab-pending">
+            <div class="table-responsive">
+              <table class="table table-sm table-hover align-middle">
+                <thead>
+                <tr>
+                  <th>店铺</th><th>SKU</th><th>Title</th>
+                  <th>7天销量</th><th>日均</th><th>当前库存</th><th>需分配</th><th>操作</th>
+                </tr>
+                </thead>
+                <tbody id="tbl-inv-pending"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div id="inv-tab-allocated" class="d-none">
+            <div class="table-responsive">
+              <table class="table table-sm table-hover align-middle">
+                <thead><tr><th>ID</th><th>店铺</th><th>SKU</th><th>Title</th><th>分配数量</th><th>状态</th><th>时间</th><th>操作</th></tr></thead>
+                <tbody id="tbl-inv-alloc"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div id="inv-tab-sync" class="d-none">
+            <div class="table-responsive">
+              <table class="table table-sm table-hover align-middle">
+                <thead><tr><th>ID</th><th>分配ID</th><th>店铺</th><th>SKU</th><th>数量</th><th>成功</th><th>时间</th></tr></thead>
+                <tbody id="tbl-inv-sync"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div id="inv-tab-clear" class="d-none">
+            <div class="table-responsive">
+              <table class="table table-sm table-hover align-middle">
+                <thead><tr><th>ID</th><th>来源店铺</th><th>被清零店铺</th><th>SKU</th><th>清零数量</th><th>时间</th></tr></thead>
+                <tbody id="tbl-inv-clear"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div id="inv-tab-snapshot" class="d-none">
+          <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle">
+              <thead><tr><th>SKU</th><th>Title</th><th>Qty</th><th>Price</th><th>StockValue</th><th>UpdatedAt</th><th>操作</th></tr></thead>
+              <tbody id="tbl-inv"></tbody>
+            </table>
+          </div>
+          </div>
+
+          <div id="inv-tab-purchase" class="d-none">
+            <div class="table-responsive">
+              <table class="table table-sm table-hover align-middle">
+                <thead><tr><th>ID</th><th>单号</th><th>仓库</th><th>状态</th><th>供应商</th><th>创建时间</th><th>操作</th></tr></thead>
+                <tbody id="tbl-po"></tbody>
+              </table>
+            </div>
+            <div class="mt-3 d-none" id="po-detail-box">
+              <div class="fw-semibold mb-2">明细</div>
+              <pre class="p-3 bg-body-tertiary rounded border small" id="po-detail"></pre>
+            </div>
+          </div>
+
+          <div id="inv-tab-transfer" class="d-none">
+            <div class="table-responsive">
+              <table class="table table-sm table-hover align-middle">
+                <thead><tr><th>ID</th><th>单号</th><th>From</th><th>To</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead>
+                <tbody id="tbl-to"></tbody>
+              </table>
+            </div>
+            <div class="mt-3 d-none" id="to-detail-box">
+              <div class="fw-semibold mb-2">明细</div>
+              <pre class="p-3 bg-body-tertiary rounded border small" id="to-detail"></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="view-bi" class="view card shadow-sm d-none">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between">
+            <h5 class="mb-0">趋势图（按天库存变动）</h5>
+            <button class="btn btn-sm btn-outline-primary" id="btn-refresh-bi">刷新</button>
+          </div>
+          <hr/>
+          <div class="row g-2 align-items-end">
+            <div class="col-12 col-lg-4">
+              <label class="form-label small">店铺</label>
+              <select class="form-select form-select-sm" id="bi-store"></select>
+            </div>
+            <div class="col-12 col-lg-4">
+              <label class="form-label small">SKU</label>
+              <select class="form-select form-select-sm" id="bi-sku"></select>
+            </div>
+            <div class="col-6 col-lg-2">
+              <label class="form-label small">From</label>
+              <input type="date" class="form-control form-control-sm" id="bi-from"/>
+            </div>
+            <div class="col-6 col-lg-2">
+              <label class="form-label small">To</label>
+              <input type="date" class="form-control form-control-sm" id="bi-to"/>
+            </div>
+          </div>
+          <div class="mt-3">
+            <canvas id="bi-chart" height="110"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div id="view-warehouse-list" class="view card shadow-sm d-none">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between">
+            <h5 class="mb-0">现有仓库</h5>
+            <button class="btn btn-sm btn-outline-primary" id="btn-refresh-warehouse-list">刷新</button>
+          </div>
+          <hr/>
+          <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle">
+              <thead><tr><th>ID</th><th>Code</th><th>Name</th><th>Status</th><th>UpdatedAt</th></tr></thead>
+              <tbody id="tbl-warehouse-list"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div id="view-warehouse-snapshot" class="view card shadow-sm d-none">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between">
+            <h5 class="mb-0">多仓库库存快照</h5>
+            <div class="d-flex gap-2 align-items-center">
+              <select class="form-select form-select-sm" id="sel-warehouse" style="width: 220px"></select>
+              <button class="btn btn-sm btn-outline-primary" id="btn-refresh-warehouse">刷新</button>
+            </div>
+          </div>
+          <hr/>
+          <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle">
+              <thead>
+              <tr>
+                <th>SKU</th><th>Title</th>
+                <th>可用</th><th>在途</th><th>总数</th>
+                <th>成本</th><th>售价</th><th>单件利润</th><th>利润率</th>
+                <th>刷新时间</th>
+              </tr>
+              </thead>
+              <tbody id="tbl-wh-inv"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div id="view-rank-sales" class="view card shadow-sm d-none">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between">
+            <h5 class="mb-0">销量排行榜（30天）</h5>
+            <button class="btn btn-sm btn-outline-primary" id="btn-refresh-rank-sales">刷新</button>
+          </div>
+          <hr/>
+          <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle">
+              <thead><tr><th>#</th><th>SKU</th><th>Title</th><th>30天销量</th></tr></thead>
+              <tbody id="tbl-rank-sales"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div id="view-rank-profit" class="view card shadow-sm d-none">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between">
+            <h5 class="mb-0">利润排行榜（30天）</h5>
+            <button class="btn btn-sm btn-outline-primary" id="btn-refresh-rank-profit">刷新</button>
+          </div>
+          <hr/>
+          <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle">
+              <thead><tr><th>#</th><th>SKU</th><th>Title</th><th>30天利润</th><th>利润率</th></tr></thead>
+              <tbody id="tbl-rank-profit"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div id="view-ops" class="view card shadow-sm d-none">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between">
+            <h5 class="mb-0">运营看板（平台 → 店铺维度）</h5>
+            <button class="btn btn-sm btn-outline-primary" id="btn-refresh-ops">刷新</button>
+          </div>
+          <hr/>
+          <div class="row g-2 align-items-end">
+            <div class="col-12 col-lg-4">
+              <label class="form-label small">店铺</label>
+              <select class="form-select form-select-sm" id="ops-store"></select>
+            </div>
+            <div class="col-6 col-lg-4">
+              <label class="form-label small">From</label>
+              <input type="date" class="form-control form-control-sm" id="ops-from"/>
+            </div>
+            <div class="col-6 col-lg-4">
+              <label class="form-label small">To</label>
+              <input type="date" class="form-control form-control-sm" id="ops-to"/>
+            </div>
+          </div>
+
+          <ul class="nav nav-pills nav-pills-sm mb-3 mt-3" id="ops-tabs">
+            <li class="nav-item"><button class="nav-link active" data-tab="kpi" type="button">KPI</button></li>
+            <li class="nav-item"><button class="nav-link" data-tab="ads" type="button">广告</button></li>
+            <li class="nav-item"><button class="nav-link" data-tab="cash" type="button">收支</button></li>
+            <li class="nav-item"><button class="nav-link" data-tab="funnel" type="button">漏斗</button></li>
+          </ul>
+
+          <div class="row g-3 mt-1">
+            <div class="col-12">
+              <div class="row g-3" id="ops-summary">
+                <div class="col-12 col-lg-3">
+                  <div class="card border-0 bg-body-tertiary">
+                    <div class="card-body py-2">
+                      <div class="small text-secondary">区间 GMV</div>
+                      <div class="fs-5 fw-semibold" id="ops-sum-gmv">-</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-12 col-lg-3">
+                  <div class="card border-0 bg-body-tertiary">
+                    <div class="card-body py-2">
+                      <div class="small text-secondary">区间 毛利</div>
+                      <div class="fs-5 fw-semibold" id="ops-sum-profit">-</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-12 col-lg-3">
+                  <div class="card border-0 bg-body-tertiary">
+                    <div class="card-body py-2">
+                      <div class="small text-secondary">区间 订单数</div>
+                      <div class="fs-5 fw-semibold" id="ops-sum-orders">-</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-12 col-lg-3">
+                  <div class="card border-0 bg-body-tertiary">
+                    <div class="card-body py-2">
+                      <div class="small text-secondary">区间 净额</div>
+                      <div class="fs-5 fw-semibold" id="ops-sum-net">-</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="col-12 col-lg-6" id="ops-panel-kpi">
+              <div class="fw-semibold mb-2">GMV（元）</div>
+              <canvas id="ops-gmv" height="110"></canvas>
+            </div>
+            <div class="col-12 col-lg-6" id="ops-panel-cash">
+              <div class="fw-semibold mb-2">收支净额（元）</div>
+              <canvas id="ops-net" height="110"></canvas>
+            </div>
+            <div class="col-12 col-lg-6 d-none" id="ops-panel-ads">
+              <div class="fw-semibold mb-2">广告支出（元）</div>
+              <canvas id="ops-ads" height="110"></canvas>
+            </div>
+            <div class="col-12 col-lg-6 d-none" id="ops-panel-funnel">
+              <div class="fw-semibold mb-2">销售漏斗（单量）</div>
+              <canvas id="ops-funnel" height="110"></canvas>
+            </div>
+          </div>
+
+          <div class="mt-3" id="ops-table-kpi">
+            <div class="fw-semibold mb-2">KPI 明细</div>
+            <div class="table-responsive">
+              <table class="table table-sm table-hover align-middle">
+                <thead><tr><th>Day</th><th>GMV</th><th>订单</th><th>退款</th><th>广告</th><th>毛利</th><th>毛利率</th></tr></thead>
+                <tbody id="tbl-ops-kpi"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="mt-3 d-none" id="ops-table-ads">
+            <div class="fw-semibold mb-2">广告日报</div>
+            <div class="table-responsive">
+              <table class="table table-sm table-hover align-middle">
+                <thead><tr><th>Day</th><th>支出</th><th>曝光</th><th>点击</th></tr></thead>
+                <tbody id="tbl-ops-ads"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="mt-3 d-none" id="ops-table-cash">
+            <div class="fw-semibold mb-2">收支日报</div>
+            <div class="table-responsive">
+              <table class="table table-sm table-hover align-middle">
+                <thead><tr><th>Day</th><th>收入</th><th>支出</th><th>净额</th></tr></thead>
+                <tbody id="tbl-ops-cash"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 采购单/调拨单已合并到“库存变动”页签中 -->
+
+      <div id="view-slow" class="view card shadow-sm d-none">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between">
+            <h5 class="mb-0">滞销&动销率（30天）</h5>
+            <button class="btn btn-sm btn-outline-primary" id="btn-refresh-slow">刷新</button>
+          </div>
+          <hr/>
+          <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle">
+              <thead>
+              <tr>
+                <th>#</th><th>SKU</th><th>Title</th>
+                <th>30天销量</th><th>总库存</th><th>可用</th><th>在途</th>
+                <th>动销率</th><th>可售天数</th>
+              </tr>
+              </thead>
+              <tbody id="tbl-slow"></tbody>
+            </table>
+          </div>
+          <div class="small text-secondary mt-2">
+            口径：动销率=销量/(销量+期末库存)，可售天数≈可用库存/(30天日均销量)。销量为 0 时可售天数为空。
+          </div>
+        </div>
+      </div>
+
+      <div id="view-loss" class="view card shadow-sm d-none">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between">
+            <h5 class="mb-0">负利润看板（标价-成本）</h5>
+            <button class="btn btn-sm btn-outline-primary" id="btn-refresh-loss">刷新</button>
+          </div>
+          <hr/>
+          <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle">
+              <thead>
+              <tr>
+                <th>#</th><th>SKU</th><th>Title</th>
+                <th>成本</th><th>售价</th><th>单件利润</th><th>利润率</th>
+              </tr>
+              </thead>
+              <tbody id="tbl-loss"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div id="view-orders" class="view card shadow-sm d-none">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between">
+            <h5 class="mb-0">订单管理</h5>
+            <button class="btn btn-sm btn-outline-primary" id="btn-refresh-orders">刷新</button>
+          </div>
+          <hr/>
+          <div class="row g-2 align-items-end">
+            <div class="col-12 col-lg-4">
+              <label class="form-label small">店铺（随平台过滤）</label>
+              <select class="form-select form-select-sm" id="orders-store"></select>
+            </div>
+            <div class="col-6 col-lg-3">
+              <label class="form-label small">From</label>
+              <input type="date" class="form-control form-control-sm" id="orders-from"/>
+            </div>
+            <div class="col-6 col-lg-3">
+              <label class="form-label small">To</label>
+              <input type="date" class="form-control form-control-sm" id="orders-to"/>
+            </div>
+            <div class="col-12 col-lg-2">
+              <label class="form-label small">状态</label>
+              <select class="form-select form-select-sm" id="orders-status">
+                <option value="">全部</option>
+                <option value="CREATED">CREATED</option>
+                <option value="PAID">PAID</option>
+                <option value="SHIPPED">SHIPPED</option>
+                <option value="DELIVERED">DELIVERED</option>
+                <option value="CANCELLED">CANCELLED</option>
+                <option value="RETURNED">RETURNED</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="mt-3 table-responsive">
+            <table class="table table-sm table-hover align-middle">
+              <thead>
+              <tr>
+                <th>ID</th><th>单号</th><th>店铺</th><th>仓库</th><th>状态</th>
+                <th>件数</th><th>金额</th><th>创建</th><th>支付</th><th>发货</th><th>签收</th>
+              </tr>
+              </thead>
+              <tbody id="tbl-orders"></tbody>
+            </table>
+          </div>
+
+          <div class="mt-3 d-none" id="orders-detail-box">
+            <div class="fw-semibold mb-2">订单详情</div>
+            <pre class="p-3 bg-body-tertiary rounded border small" id="orders-detail"></pre>
+          </div>
+        </div>
+      </div>
+
+      <div id="view-profit-table" class="view card shadow-sm d-none">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between">
+            <h5 class="mb-0">商品利润表（店铺维度）</h5>
+            <button class="btn btn-sm btn-outline-primary" id="btn-refresh-profit-table">刷新</button>
+          </div>
+          <hr/>
+          <div class="row g-2 align-items-end">
+            <div class="col-12 col-lg-4">
+              <label class="form-label small">店铺（随平台过滤）</label>
+              <select class="form-select form-select-sm" id="profit-store"></select>
+            </div>
+            <div class="col-12 col-lg-8">
+              <div class="card border-0 bg-body-tertiary">
+                <div class="card-body py-2">
+                  <div class="row g-2 align-items-end">
+                    <div class="col-6 col-lg-3">
+                      <label class="form-label small">售价(分)</label>
+                      <input class="form-control form-control-sm" id="calc-price-cent" type="number" min="0" value="360"/>
+                    </div>
+                    <div class="col-6 col-lg-3">
+                      <label class="form-label small">成本(分)</label>
+                      <input class="form-control form-control-sm" id="calc-cost-cent" type="number" min="0" value="235"/>
+                    </div>
+                    <div class="col-12 col-lg-2">
+                      <button class="btn btn-sm btn-outline-secondary w-100" id="btn-calc-profit">计算</button>
+                    </div>
+                    <div class="col-12 col-lg-4 small">
+                      <div>利润：<span class="fw-semibold" id="calc-profit-cent">-</span> 分</div>
+                      <div>利润率：<span class="fw-semibold" id="calc-profit-pct">-</span> %</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-3 table-responsive">
+            <table class="table table-sm table-hover align-middle">
+              <thead>
+              <tr>
+                <th>商品</th><th>SKU</th><th>标题</th><th>售价</th><th>成本</th><th>单件利润</th><th>利润率%</th>
+                <th>库存</th><th>库存利润</th><th>库龄(天)</th><th>库存更新时间</th>
+              </tr>
+              </thead>
+              <tbody id="tbl-profit-table"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div id="view-price-todos" class="view card shadow-sm d-none">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between">
+            <h5 class="mb-0">调价待办（库龄长 + 近7天无销量）</h5>
+            <button class="btn btn-sm btn-outline-primary" id="btn-refresh-price-todos">刷新</button>
+          </div>
+          <hr/>
+          <div class="row g-2 align-items-end">
+            <div class="col-12 col-lg-4">
+              <label class="form-label small">店铺（随平台过滤）</label>
+              <select class="form-select form-select-sm" id="todo-store"></select>
+            </div>
+            <div class="col-6 col-lg-2">
+              <label class="form-label small">最小库龄(天)</label>
+              <input type="number" class="form-control form-control-sm" id="todo-min-days" value="30" min="1"/>
+            </div>
+          </div>
+          <div class="mt-3 table-responsive">
+            <table class="table table-sm table-hover align-middle">
+              <thead>
+              <tr>
+                <th>SKU</th><th>标题</th><th>库存</th><th>库龄(天)</th><th>近7天销量</th>
+                <th>售价</th><th>成本</th><th>利润率%</th><th>建议价(分)</th>
+                <th>库存更新时间</th>
+              </tr>
+              </thead>
+              <tbody id="tbl-price-todos"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div id="view-price-history" class="view card shadow-sm d-none">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between">
+            <h5 class="mb-0">调价记录</h5>
+            <button class="btn btn-sm btn-outline-primary" id="btn-refresh-price-history">刷新</button>
+          </div>
+          <hr/>
+          <div class="small text-secondary mb-2">当前页展示：调价记录 + 成本变更记录（按时间倒序）。</div>
+          <div class="row g-2">
+            <div class="col-12 col-lg-6">
+              <div class="fw-semibold mb-2">调价记录</div>
+              <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle">
+                  <thead><tr><th>ID</th><th>SKU</th><th>旧价</th><th>新价</th><th>操作人</th><th>时间</th></tr></thead>
+                  <tbody id="tbl-price-history"></tbody>
+                </table>
+              </div>
+            </div>
+            <div class="col-12 col-lg-6">
+              <div class="fw-semibold mb-2">成本变更记录</div>
+              <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle">
+                  <thead><tr><th>ID</th><th>SKU</th><th>旧成本</th><th>新成本</th><th>操作人</th><th>时间</th></tr></thead>
+                  <tbody id="tbl-cost-history"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="view-new-products" class="view card shadow-sm d-none">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between">
+            <h5 class="mb-0">新品上架（调研候选品）</h5>
+            <button class="btn btn-sm btn-outline-primary" id="btn-refresh-new-products">刷新</button>
+          </div>
+          <hr/>
+          <div class="row g-2">
+            <div class="col-12 col-lg-5" id="np-create-panel">
+              <div class="fw-semibold mb-2">新增候选品</div>
+              <div class="row g-2">
+                <div class="col-6">
+                  <input class="form-control form-control-sm" id="np-code" placeholder="候选编码 NP-xxxx"/>
+                </div>
+                <div class="col-6">
+                  <input class="form-control form-control-sm" id="np-name" placeholder="名称"/>
+                </div>
+                <div class="col-6">
+                  <input class="form-control form-control-sm" id="np-category" placeholder="类目(可选)"/>
+                </div>
+                <div class="col-3">
+                  <input class="form-control form-control-sm" id="np-cost" type="number" min="0" placeholder="成本(分)"/>
+                </div>
+                <div class="col-3">
+                  <input class="form-control form-control-sm" id="np-price" type="number" min="0" placeholder="售价(分)"/>
+                </div>
+                <div class="col-12">
+                  <input class="form-control form-control-sm" id="np-remark" placeholder="备注(可选)"/>
+                </div>
+                <div class="col-12">
+                  <button class="btn btn-sm btn-outline-success" id="btn-np-create">新增</button>
+                </div>
+              </div>
+            </div>
+            <div class="col-12 col-lg-7">
+              <div class="fw-semibold mb-2">候选品列表（按当前平台过滤）</div>
+              <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle">
+                  <thead>
+                  <tr>
+                    <th>ID</th><th>编码</th><th>名称</th><th>状态</th><th>成本</th><th>售价</th><th>更新时间</th><th>操作</th>
+                  </tr>
+                  </thead>
+                  <tbody id="tbl-new-products"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="view-account-admin" class="view card shadow-sm d-none">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between">
+            <h5 class="mb-0">账号与权限管理</h5>
+            <button class="btn btn-sm btn-outline-primary" id="btn-refresh-accounts">刷新</button>
+          </div>
+          <hr/>
+          <ul class="nav nav-tabs mb-3" id="account-admin-tabs">
+            <li class="nav-item"><button class="nav-link active" data-tab="accounts">账号管理</button></li>
+            <li class="nav-item"><button class="nav-link" data-tab="permissions">权限与目录</button></li>
+          </ul>
+          <div id="panel-accounts">
+            <div class="mb-2"><button class="btn btn-sm btn-success" id="btn-add-account">新增账号</button></div>
+            <div class="table-responsive">
+              <table class="table table-sm table-hover align-middle">
+                <thead><tr><th>账号</th><th>姓名</th><th>状态</th><th>密码</th><th>角色</th><th>可见目录</th><th>操作</th></tr></thead>
+                <tbody id="tbl-accounts"></tbody>
+              </table>
+            </div>
+          </div>
+          <div id="panel-permissions" class="d-none">
+            <div class="mb-2"><button class="btn btn-sm btn-success" id="btn-add-role">新增权限</button></div>
+            <div class="table-responsive">
+              <table class="table table-sm table-hover align-middle">
+                <thead><tr><th>权限（角色）</th><th>拥有目录</th><th>操作</th></tr></thead>
+                <tbody id="tbl-roles-permissions"></tbody>
+              </table>
+            </div>
+            <div class="mt-2 small text-secondary">
+              说明：左侧为角色名称，右侧为该角色可访问的菜单目录。初级运营：基础数据、商品、商品变体；高级运营：+店铺、店铺KPI、库存变动；老板/开发：全部目录。
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <button type="button" id="modal-account-trigger" class="d-none" data-bs-toggle="modal" data-bs-target="#modal-account"></button>
+      <div class="modal fade" id="modal-account" tabindex="-1">
+        <div class="modal-dialog"><div class="modal-content">
+          <div class="modal-header"><h6 class="modal-title" id="modal-account-title">新增账号</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+          <div class="modal-body">
+            <input type="hidden" id="account-id"/>
+            <div class="mb-2"><label class="form-label small">账号</label><input class="form-control form-control-sm" id="account-username" placeholder="登录账号" required/></div>
+            <div class="mb-2"><label class="form-label small">密码</label><input type="password" class="form-control form-control-sm" id="account-password" placeholder="新增时必填"/></div>
+            <div class="mb-2"><label class="form-label small">姓名</label><input class="form-control form-control-sm" id="account-displayName" placeholder="显示名称"/></div>
+            <div class="mb-2"><label class="form-label small">状态</label><select class="form-select form-select-sm" id="account-status"><option value="ACTIVE">ACTIVE</option><option value="LOCKED">LOCKED</option></select></div>
+            <div class="mb-2"><label class="form-label small">角色</label><div id="account-roles-checkboxes"></div></div>
+          </div>
+          <div class="modal-footer"><button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">取消</button><button type="button" class="btn btn-primary btn-sm" id="btn-save-account">保存</button></div>
+        </div></div>
+      </div>
+
+      <button type="button" id="modal-role-permissions-trigger" class="d-none" data-bs-toggle="modal" data-bs-target="#modal-role-permissions"></button>
+      <div class="modal fade" id="modal-role-permissions" tabindex="-1">
+        <div class="modal-dialog modal-lg"><div class="modal-content">
+          <div class="modal-header"><h6 class="modal-title" id="modal-role-permissions-title">新增权限</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+          <div class="modal-body">
+            <input type="hidden" id="role-permissions-roleId"/>
+            <div class="mb-2" id="role-code-row"><label class="form-label small">角色 Code</label><input class="form-control form-control-sm" id="role-permissions-code" placeholder="如 junior-ops（英文、小写、连字符）"/></div>
+            <div class="mb-2"><label class="form-label small">角色名称</label><input class="form-control form-control-sm" id="role-permissions-name" placeholder="显示名称"/></div>
+            <div class="mb-2"><label class="form-label small">勾选该角色可访问的目录</label><div id="role-permissions-checkboxes" class="d-flex flex-wrap gap-3"></div></div>
+          </div>
+          <div class="modal-footer"><button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">取消</button><button type="button" class="btn btn-primary btn-sm" id="btn-save-role-permissions">保存</button></div>
+        </div></div>
+      </div>
+
+      <div id="view-crud-admin" class="view card shadow-sm d-none">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <h5 class="mb-0">CRUD 数据管理</h5>
+            <div class="d-flex align-items-center gap-2">
+              <select class="form-select form-select-sm" id="crud-entity-select" style="width: 200px"></select>
+              <button class="btn btn-sm btn-success" id="crud-btn-add">新增</button>
+              <button class="btn btn-sm btn-outline-primary" id="crud-btn-refresh">刷新</button>
+            </div>
+          </div>
+          <hr/>
+          <p class="small text-secondary mb-2">选择上方实体可查看/编辑由 @AutoCrud 生成的 CRUD 数据，直接对接后端 <code>/api/crud/{实体}</code> 接口。</p>
+          <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle">
+              <thead><tr id="crud-table-head"></tr></thead>
+              <tbody id="crud-table-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <button type="button" id="modal-crud-trigger" class="d-none" data-bs-toggle="modal" data-bs-target="#modal-crud"></button>
+      <div class="modal fade" id="modal-crud" tabindex="-1">
+        <div class="modal-dialog modal-lg"><div class="modal-content">
+          <div class="modal-header"><h6 class="modal-title" id="modal-crud-title">新增</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+          <div class="modal-body" id="modal-crud-body"></div>
+          <div class="modal-footer"><button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">取消</button><button type="button" class="btn btn-primary btn-sm" id="crud-btn-save">保存</button></div>
+        </div></div>
+      </div>
+
+      <div id="view-admin-usage" class="view card shadow-sm d-none">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between">
+            <h5 class="mb-0">使用统计（目录）</h5>
+            <button class="btn btn-sm btn-outline-primary" id="btn-refresh-admin-usage">刷新</button>
+          </div>
+          <hr/>
+          <div class="row g-3">
+            <div class="col-12 col-lg-5">
+              <div class="fw-semibold mb-2">使用最多的目录</div>
+              <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle">
+                  <thead><tr><th>目录</th><th>次数</th></tr></thead>
+                  <tbody id="tbl-usage-top-dirs"></tbody>
+                </table>
+              </div>
+            </div>
+            <div class="col-12 col-lg-7">
+              <div class="fw-semibold mb-2">该目录使用最多的用户</div>
+              <div class="small text-secondary mb-2">在「使用最多的目录」表中点击某一行，可查看该目录下活跃用户排行。</div>
+              <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle">
+                  <thead><tr><th>用户</th><th>次数</th></tr></thead>
+                  <tbody id="tbl-usage-top-users"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="view-sql" class="view card shadow-sm d-none">
+        <div class="card-body">
+          <h5 class="mb-0">SQL脚本（复制去执行）</h5>
+          <hr/>
+          <div class="row g-3">
+            <div class="col-12">
+              <div class="small text-secondary mb-2">表结构</div>
+              <pre class="p-3 bg-body-tertiary rounded border small" id="sql-schema"></pre>
+            </div>
+            <div class="col-12">
+              <div class="small text-secondary mb-2">视图</div>
+              <pre class="p-3 bg-body-tertiary rounded border small" id="sql-views"></pre>
+            </div>
+            <div class="col-12">
+              <div class="small text-secondary mb-2">函数/“物化视图”替代</div>
+              <pre class="p-3 bg-body-tertiary rounded border small" id="sql-fn"></pre>
+            </div>
+            <div class="col-12">
+              <div class="small text-secondary mb-2">模拟数据</div>
+              <pre class="p-3 bg-body-tertiary rounded border small" id="sql-mock"></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="/assets/app.js"></script>
+</body>
+</html>

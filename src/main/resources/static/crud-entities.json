@@ -1,0 +1,57 @@
+[
+  {
+    "apiPath": "demo-entity",
+    "displayName": "Demo实体",
+    "fields": [
+      {"name": "id", "label": "Id", "type": "number", "editable": false},
+      {"name": "name", "label": "Name", "type": "string", "editable": true},
+      {"name": "status", "label": "Status", "type": "number", "editable": true},
+      {"name": "createdAt", "label": "创建时间", "type": "datetime", "editable": true}
+    ]
+  },
+  {
+    "apiPath": "english-entity",
+    "displayName": "English实体",
+    "fields": [
+      {"name": "id", "label": "Id", "type": "number", "editable": false},
+      {"name": "name", "label": "Name", "type": "string", "editable": true},
+      {"name": "status", "label": "Status", "type": "number", "editable": true},
+      {"name": "createdAt", "label": "创建时间", "type": "datetime", "editable": true}
+    ]
+  },
+  {
+    "apiPath": "liu-entity",
+    "displayName": "liu实体",
+    "fields": [
+      {"name": "id", "label": "Id", "type": "number", "editable": false},
+      {"name": "name", "label": "Name", "type": "string", "editable": true},
+      {"name": "status", "label": "Status", "type": "number", "editable": true},
+      {"name": "accuount", "label": "Accuount", "type": "string", "editable": true},
+      {"name": "paih", "label": "Paih", "type": "string", "editable": true},
+      {"name": "updateAt", "label": "Update at", "type": "datetime", "editable": true},
+      {"name": "createdAt", "label": "创建时间", "type": "datetime", "editable": true},
+      {"name": "updateOn", "label": "Update on", "type": "datetime", "editable": true},
+      {"name": "createdOn", "label": "Created on", "type": "datetime", "editable": true}
+    ]
+  },
+  {
+    "apiPath": "text-entity",
+    "displayName": "text实体",
+    "fields": [
+      {"name": "id", "label": "Id", "type": "number", "editable": false},
+      {"name": "name", "label": "Name", "type": "string", "editable": true},
+      {"name": "status", "label": "Status", "type": "number", "editable": true},
+      {"name": "createdAt", "label": "创建时间", "type": "datetime", "editable": true}
+    ]
+  },
+  {
+    "apiPath": "wangfan-entity",
+    "displayName": "wangfan实体",
+    "fields": [
+      {"name": "id", "label": "Id", "type": "number", "editable": false},
+      {"name": "name", "label": "Name", "type": "string", "editable": true},
+      {"name": "status", "label": "Status", "type": "number", "editable": true},
+      {"name": "createdAt", "label": "创建时间", "type": "datetime", "editable": true}
+    ]
+  }
+]
