@@ -35,6 +35,26 @@
     ]
   },
   {
+    "apiPath": "order-aggregate",
+    "displayName": "Order aggregate实体",
+    "fields": [
+      {"name": "id", "label": "Id", "type": "number", "editable": false},
+      {"name": "orderNo", "label": "Order no", "type": "string", "editable": true},
+      {"name": "storeId", "label": "Store id", "type": "number", "editable": true},
+      {"name": "createdAt", "label": "创建时间", "type": "datetime", "editable": true}
+    ],
+    "children": [{
+      "collectionField": "items",
+      "displayName": "Order item line实体",
+      "fields": [
+        {"name": "id", "label": "Id", "type": "number", "editable": false},
+        {"name": "orderId", "label": "Order id", "type": "number", "editable": false},
+        {"name": "sku", "label": "Sku", "type": "string", "editable": true},
+        {"name": "qty", "label": "Qty", "type": "number", "editable": true}
+      ]
+    }]
+  },
+  {
     "apiPath": "text-entity",
     "displayName": "text实体",
     "fields": [

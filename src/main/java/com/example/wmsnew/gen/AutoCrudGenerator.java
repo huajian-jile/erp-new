@@ -3,6 +3,7 @@ package com.example.wmsnew.gen;
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.expr.MemberValuePair;
 import com.github.javaparser.ast.expr.NormalAnnotationExpr;
@@ -11,6 +12,8 @@ import com.github.javaparser.ast.expr.StringLiteralExpr;
 import com.github.javaparser.ast.visitor.VoidVisitorAdapter;
 
 import java.nio.charset.StandardCharsets;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
@@ -68,9 +71,15 @@ public class AutoCrudGenerator {
 
         String basePkg = "com.example.wmsnew";
         for (EntityMeta e : entities) {
-            generateRepo(baseDir, e, basePkg);
-            generateService(baseDir, e, basePkg);
-            generateController(baseDir, e, basePkg);
+            if (e.children.isEmpty()) {
+                generateRepo(baseDir, e, basePkg);
+                generateService(baseDir, e, basePkg);
+                generateController(baseDir, e, basePkg);
+            } else {
+                generateAggregateRepos(baseDir, e, basePkg);
+                generateAggregateService(baseDir, e, basePkg);
+                generateAggregateController(baseDir, e, basePkg);
+            }
             sql.append(toCreateTable(e)).append("\n");
         }
 
@@ -116,16 +125,55 @@ public class AutoCrudGenerator {
                     .flatMap(cu -> cu.getPackageDeclaration().map(pd -> pd.getNameAsString()))
                     .orElse("");
             String simpleName = n.getNameAsString();
-            List<FieldMeta> fields = n.getFields().stream()
-                    .filter(f -> !f.isStatic())
-                    .flatMap(f -> f.getVariables().stream()
-                            .map(v -> new FieldMeta(
-                                    v.getNameAsString(),
-                                    v.getTypeAsString(),
-                                    "id".equalsIgnoreCase(v.getNameAsString()))))
-                    .collect(Collectors.toList());
+            List<FieldMeta> fields = new ArrayList<>();
+            List<ChildMeta> children = new ArrayList<>();
+            for (FieldDeclaration f : n.getFields()) {
+                if (f.isStatic()) continue;
+                for (var v : f.getVariables()) {
+                    String typeStr = v.getTypeAsString();
+                    if (typeStr.startsWith("List<") && f.getAnnotations().stream().anyMatch(a -> "OneToMany".equals(a.getNameAsString()))) {
+                        String childName = extractGenericType(typeStr);
+                        String childTable = extractAnnotationValue(f, "childTable").orElse("wms_" + toSnakeCase(simpleName) + "_" + toSnakeCase(childName));
+                        String fkCol = extractAnnotationValue(f, "fkColumn").orElse(toSnakeCase(simpleName) + "_id");
+                        ClassOrInterfaceDeclaration inner = findInnerClass(n, childName);
+                        if (inner != null) {
+                            List<FieldMeta> childFields = inner.getFields().stream()
+                                    .filter(ff -> !ff.isStatic())
+                                    .flatMap(ff -> ff.getVariables().stream()
+                                            .map(vv -> new FieldMeta(vv.getNameAsString(), vv.getTypeAsString(), "id".equalsIgnoreCase(vv.getNameAsString()))))
+                                    .collect(Collectors.toList());
+                            children.add(new ChildMeta(childName, childTable, fkCol, v.getNameAsString(), childFields));
+                        }
+                    } else if (!typeStr.startsWith("List<")) {
+                        fields.add(new FieldMeta(v.getNameAsString(), typeStr, "id".equalsIgnoreCase(v.getNameAsString())));
+                    }
+                }
+            }
+            entity = new EntityMeta(simpleName, pkg, tableName, fields, children);
+        }
 
-            entity = new EntityMeta(simpleName, pkg, tableName, fields);
+        private static String extractGenericType(String typeStr) {
+            Matcher m = Pattern.compile("List<([^>]+)>").matcher(typeStr);
+            return m.find() ? m.group(1).trim() : "";
+        }
+
+        private static Optional<String> extractAnnotationValue(FieldDeclaration f, String attr) {
+            return f.getAnnotations().stream()
+                    .filter(a -> "OneToMany".equals(a.getNameAsString()))
+                    .filter(a -> a instanceof NormalAnnotationExpr)
+                    .map(a -> (NormalAnnotationExpr) a)
+                    .flatMap(a -> a.getPairs().stream().filter(p -> attr.equals(p.getNameAsString())).findFirst().stream())
+                    .map(p -> p.getValue().toString().replace("\"", "").trim())
+                    .findFirst();
+        }
+
+        private static ClassOrInterfaceDeclaration findInnerClass(ClassOrInterfaceDeclaration parent, String name) {
+            return parent.getMembers().stream()
+                    .filter(m -> m instanceof ClassOrInterfaceDeclaration)
+                    .map(m -> (ClassOrInterfaceDeclaration) m)
+                    .filter(c -> c.getNameAsString().equals(name))
+                    .findFirst()
+                    .orElse(null);
         }
     }
 
@@ -238,6 +286,146 @@ public class AutoCrudGenerator {
         Files.writeString(file, code, StandardCharsets.UTF_8);
     }
 
+    private static void generateAggregateRepos(Path baseDir, EntityMeta e, String basePkg) throws java.io.IOException {
+        String entityClass = e.pkg + "." + e.simpleName;
+        Path parentFile = baseDir.resolve(REPO_DIR).resolve(e.simpleName + "Repository.java");
+        String parentCode = "package " + basePkg + ".repository;\n\n" +
+                "import org.springframework.data.repository.CrudRepository;\n" +
+                "import " + entityClass + ";\n\n" +
+                "/** Auto-generated. DO NOT EDIT. */\n" +
+                "public interface " + e.simpleName + "Repository extends CrudRepository<" + e.simpleName + ", Long> {\n" +
+                "}\n";
+        Files.writeString(parentFile, parentCode, StandardCharsets.UTF_8);
+
+        for (ChildMeta c : e.children) {
+            String fkMethod = toPascalCase(c.fkColumn);
+            String fkParam = toCamelCase(c.fkColumn);
+            Path childFile = baseDir.resolve(REPO_DIR).resolve(e.simpleName + c.simpleName + "Repository.java");
+            String childCode = "package " + basePkg + ".repository;\n\n" +
+                    "import org.springframework.data.repository.CrudRepository;\n" +
+                    "import " + entityClass + ";\n\n" +
+                    "import java.util.List;\n\n" +
+                    "/** Auto-generated. DO NOT EDIT. */\n" +
+                    "public interface " + e.simpleName + c.simpleName + "Repository extends CrudRepository<" + e.simpleName + "." + c.simpleName + ", Long> {\n" +
+                    "    List<" + e.simpleName + "." + c.simpleName + "> findBy" + fkMethod + "(Long " + fkParam + ");\n" +
+                    "}\n";
+            Files.writeString(childFile, childCode, StandardCharsets.UTF_8);
+        }
+    }
+
+    private static String toPascalCase(String s) {
+        StringBuilder sb = new StringBuilder();
+        for (String part : s.split("[_\\s]+")) {
+            if (!part.isEmpty()) sb.append(Character.toUpperCase(part.charAt(0))).append(part.substring(1).toLowerCase());
+        }
+        return sb.toString();
+    }
+
+    private static String toCamelCase(String s) {
+        String p = toPascalCase(s);
+        return p.isEmpty() ? p : Character.toLowerCase(p.charAt(0)) + p.substring(1);
+    }
+
+    private static void generateAggregateService(Path baseDir, EntityMeta e, String basePkg) throws java.io.IOException {
+        String entityClass = e.pkg + "." + e.simpleName;
+        ChildMeta child = e.children.get(0);
+        String parentRepo = e.simpleName + "Repository";
+        String childRepo = e.simpleName + child.simpleName + "Repository";
+        String fkPascal = toPascalCase(child.fkColumn);
+        String fkCamel = toCamelCase(child.fkColumn);
+        String getter = "get" + fkPascal;
+        String setter = "set" + fkPascal;
+        String findMethod = "findBy" + fkPascal;
+        String getItems = "get" + toPascalCase(child.collectionField);
+        String setItems = "set" + toPascalCase(child.collectionField);
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("package ").append(basePkg).append(".service;\n\n");
+        sb.append("import ").append(entityClass).append(";\n");
+        sb.append("import ").append(basePkg).append(".repository.").append(parentRepo).append(";\n");
+        sb.append("import ").append(basePkg).append(".repository.").append(childRepo).append(";\n");
+        sb.append("import org.springframework.stereotype.Service;\n\n");
+        sb.append("import java.util.Optional;\n");
+        sb.append("import java.util.ArrayList;\n");
+        sb.append("import java.util.List;\n\n");
+        sb.append("/** Auto-generated aggregate Service. DO NOT EDIT. */\n");
+        sb.append("@Service\n");
+        sb.append("public class ").append(e.simpleName).append("Service {\n");
+        sb.append("    private final ").append(parentRepo).append(" parentRepo;\n");
+        sb.append("    private final ").append(childRepo).append(" childRepo;\n\n");
+        sb.append("    public ").append(e.simpleName).append("Service(").append(parentRepo).append(" parentRepo, ").append(childRepo).append(" childRepo) {\n");
+        sb.append("        this.parentRepo = parentRepo;\n");
+        sb.append("        this.childRepo = childRepo;\n");
+        sb.append("    }\n\n");
+        sb.append("    public ").append(e.simpleName).append(" save(").append(e.simpleName).append(" e) {\n");
+        sb.append("        ").append(e.simpleName).append(" saved = parentRepo.save(e);\n");
+        sb.append("        List<?> existing = childRepo.").append(findMethod).append("(saved.getId());\n");
+        sb.append("        if (existing != null) existing.forEach(it -> childRepo.deleteById((( ").append(e.simpleName).append(".").append(child.simpleName).append(")it).getId()));\n");
+        sb.append("        for (var item : e.").append(getItems).append("()) {\n");
+        sb.append("            item.setId(null);\n");
+        sb.append("            item.").append(setter).append("(saved.getId());\n");
+        sb.append("            childRepo.save(item);\n");
+        sb.append("        }\n");
+        sb.append("        return findById(saved.getId()).orElseThrow();\n");
+        sb.append("    }\n\n");
+        sb.append("    public Optional<").append(e.simpleName).append("> findById(Long id) {\n");
+        sb.append("        return parentRepo.findById(id).map(parent -> {\n");
+        sb.append("            var items = childRepo.").append(findMethod).append("(id);\n");
+        sb.append("            parent.").append(setItems).append("(items != null ? items : new ArrayList<>());\n");
+        sb.append("            return parent;\n");
+        sb.append("        });\n");
+        sb.append("    }\n\n");
+        sb.append("    public Iterable<").append(e.simpleName).append("> findAll() {\n");
+        sb.append("        var list = new ArrayList<").append(e.simpleName).append(">();\n");
+        sb.append("        parentRepo.findAll().forEach(p -> findById(p.getId()).ifPresent(list::add));\n");
+        sb.append("        return list;\n");
+        sb.append("    }\n\n");
+        sb.append("    public void deleteById(Long id) {\n");
+        sb.append("        var items = childRepo.").append(findMethod).append("(id);\n");
+        sb.append("        if (items != null) items.forEach(it -> childRepo.deleteById(it.getId()));\n");
+        sb.append("        parentRepo.deleteById(id);\n");
+        sb.append("    }\n");
+        sb.append("}\n");
+
+        Files.writeString(baseDir.resolve(SERVICE_DIR).resolve(e.simpleName + "Service.java"), sb.toString(), StandardCharsets.UTF_8);
+    }
+
+    private static void generateAggregateController(Path baseDir, EntityMeta e, String basePkg) throws java.io.IOException {
+        String entityClass = e.pkg + "." + e.simpleName;
+        String apiPath = toKebabCase(e.simpleName);
+        String code = "package " + basePkg + ".controller;\n\n" +
+                "import " + entityClass + ";\n" +
+                "import " + basePkg + ".service." + e.simpleName + "Service;\n" +
+                "import org.springframework.http.HttpStatus;\n" +
+                "import org.springframework.web.bind.annotation.*;\n\n" +
+                "import java.util.Optional;\n\n" +
+                "/** Auto-generated CRUD API (aggregate). DO NOT EDIT. */\n" +
+                "@RestController\n" +
+                "@RequestMapping(\"/api/crud/" + apiPath + "\")\n" +
+                "public class " + e.simpleName + "Controller {\n" +
+                "    private final " + e.simpleName + "Service service;\n\n" +
+                "    public " + e.simpleName + "Controller(" + e.simpleName + "Service service) {\n" +
+                "        this.service = service;\n" +
+                "    }\n\n" +
+                "    @GetMapping\n" +
+                "    public Iterable<" + e.simpleName + "> list() { return service.findAll(); }\n\n" +
+                "    @GetMapping(\"/{id}\")\n" +
+                "    public Optional<" + e.simpleName + "> get(@PathVariable Long id) { return service.findById(id); }\n\n" +
+                "    @PostMapping\n" +
+                "    @ResponseStatus(HttpStatus.CREATED)\n" +
+                "    public " + e.simpleName + " create(@RequestBody " + e.simpleName + " e) { return service.save(e); }\n\n" +
+                "    @PutMapping(\"/{id}\")\n" +
+                "    public " + e.simpleName + " update(@PathVariable Long id, @RequestBody " + e.simpleName + " e) {\n" +
+                "        e.setId(id);\n" +
+                "        return service.save(e);\n" +
+                "    }\n\n" +
+                "    @DeleteMapping(\"/{id}\")\n" +
+                "    @ResponseStatus(HttpStatus.NO_CONTENT)\n" +
+                "    public void delete(@PathVariable Long id) { service.deleteById(id); }\n" +
+                "}\n";
+        Files.writeString(baseDir.resolve(CONTROLLER_DIR).resolve(e.simpleName + "Controller.java"), code, StandardCharsets.UTF_8);
+    }
+
     private static String toCrudEntitiesJson(List<EntityMeta> entities) {
         StringBuilder sb = new StringBuilder();
         sb.append("[\n");
@@ -255,8 +443,25 @@ public class AutoCrudGenerator {
                 if (j < e.fields.size() - 1) sb.append(",");
                 sb.append("\n");
             }
-            sb.append("    ]\n");
-            sb.append("  }");
+            sb.append("    ]");
+            if (!e.children.isEmpty()) {
+                ChildMeta c = e.children.get(0);
+                sb.append(",\n    \"children\": [{\n");
+                sb.append("      \"collectionField\": \"").append(c.collectionField).append("\",\n");
+                sb.append("      \"displayName\": \"").append(toDisplayName(c.simpleName)).append("\",\n");
+                sb.append("      \"fields\": [\n");
+                for (int j = 0; j < c.fields.size(); j++) {
+                    FieldMeta f = c.fields.get(j);
+                    String type = toFrontendType(f.javaType);
+                    String label = toFieldLabel(f.name);
+                    boolean editable = !f.isId && !f.name.equalsIgnoreCase(toCamelCase(c.fkColumn));
+                    sb.append("        {\"name\": \"").append(f.name).append("\", \"label\": \"").append(escapeJson(label)).append("\", \"type\": \"").append(type).append("\", \"editable\": ").append(editable).append("}");
+                    if (j < c.fields.size() - 1) sb.append(",");
+                    sb.append("\n");
+                }
+                sb.append("      ]\n    }]");
+            }
+            sb.append("\n  }");
             if (i < entities.size() - 1) sb.append(",");
             sb.append("\n");
         }
@@ -324,6 +529,20 @@ public class AutoCrudGenerator {
             cols.add(col);
         }
         sb.append(String.join(",\n", cols)).append("\n);\n");
+
+        for (ChildMeta c : e.children) {
+            sb.append("\nCREATE TABLE IF NOT EXISTS ").append(c.tableName).append(" (\n");
+            List<String> ccols = new ArrayList<>();
+            for (FieldMeta f : c.fields) {
+                String sqlType = toSqlType(f.javaType, f.isId);
+                String col = "  " + toSnakeCase(f.name) + " " + sqlType;
+                if (f.isId) col += " PRIMARY KEY AUTO_INCREMENT";
+                ccols.add(col);
+            }
+            sb.append(String.join(",\n", ccols)).append(",\n");
+            sb.append("  KEY idx_").append(c.tableName.replace("wms_", "fk_")).append("_").append(c.fkColumn).append(" (").append(c.fkColumn).append(")\n");
+            sb.append(");\n");
+        }
         return sb.toString();
     }
 
@@ -347,11 +566,29 @@ public class AutoCrudGenerator {
         final String pkg;
         final String tableName;
         final List<FieldMeta> fields;
+        final List<ChildMeta> children;
 
-        EntityMeta(String simpleName, String pkg, String tableName, List<FieldMeta> fields) {
+        EntityMeta(String simpleName, String pkg, String tableName, List<FieldMeta> fields, List<ChildMeta> children) {
             this.simpleName = simpleName;
             this.pkg = pkg;
             this.tableName = tableName;
+            this.fields = fields;
+            this.children = children != null ? children : List.of();
+        }
+    }
+
+    private static class ChildMeta {
+        final String simpleName;
+        final String tableName;
+        final String fkColumn;
+        final String collectionField;
+        final List<FieldMeta> fields;
+
+        ChildMeta(String simpleName, String tableName, String fkColumn, String collectionField, List<FieldMeta> fields) {
+            this.simpleName = simpleName;
+            this.tableName = tableName;
+            this.fkColumn = fkColumn;
+            this.collectionField = collectionField;
             this.fields = fields;
         }
     }

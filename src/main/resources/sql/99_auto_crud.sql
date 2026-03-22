@@ -26,6 +26,21 @@ CREATE TABLE IF NOT EXISTS wms_liu_entity (
   created_on DATETIME NULL
 );
 
+CREATE TABLE IF NOT EXISTS wms_order_agg (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  order_no VARCHAR(255) NULL,
+  store_id BIGINT NULL,
+  created_at DATETIME NULL
+);
+
+CREATE TABLE IF NOT EXISTS wms_order_agg_item (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  order_id BIGINT NULL,
+  sku VARCHAR(255) NULL,
+  qty INT NULL,
+  KEY idx_fk_order_agg_item_order_id (order_id)
+);
+
 CREATE TABLE IF NOT EXISTS wms_text_entity (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   name VARCHAR(255) NULL,

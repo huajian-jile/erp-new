@@ -778,7 +778,9 @@ async function loadCrudTable(entity) {
   const arr = Array.isArray(rows) ? rows : (rows && typeof rows[Symbol.iterator] === "function" ? [...rows] : []);
   const thead = $("#crud-table-head");
   const tbody = $("#crud-table-body");
-  thead.innerHTML = entity.fields.map(f => `<th>${escapeHtml(f.label)}</th>`).join("") + "<th>操作</th>";
+  const child = entity.children && entity.children[0];
+  thead.innerHTML = entity.fields.map(f => `<th>${escapeHtml(f.label)}</th>`).join("") +
+    (child ? `<th>${escapeHtml(child.displayName)}</th>` : "") + "<th>操作</th>";
   tbody.innerHTML = arr.map(row => {
     const cells = entity.fields.map(f => {
       let v = row[f.name];
@@ -786,8 +788,9 @@ async function loadCrudTable(entity) {
       if (f.type === "datetime" && v) v = String(v).replace("T", " ");
       return `<td>${escapeHtml(String(v))}</td>`;
     }).join("");
+    const childCell = child ? `<td><small>${(row[child.collectionField] || []).length} 行</small></td>` : "";
     const id = row.id;
-    return `<tr data-id="${id}">${cells}<td>
+    return `<tr data-id="${id}">${cells}${childCell}<td>
       <button class="btn btn-sm btn-outline-primary me-1" data-crud-edit="${id}">编辑</button>
       ${wmsCanWrite ? `<button class="btn btn-sm btn-outline-danger" data-crud-del="${id}">删除</button>` : ""}
     </td></tr>`;
@@ -812,7 +815,7 @@ async function loadCrudTable(entity) {
 
 function openCrudModal(entity, row) {
   const isEdit = !!row;
-  $("#modal-crud-title").textContent = isEdit ? "编辑" : "新增";
+  $("#modal-crud-title").textContent = (isEdit ? "编辑" : "新增") + (entity.displayName || "");
   const body = $("#modal-crud-body");
   body.innerHTML = entity.fields.filter(f => f.editable).map(f => {
     const val = row ? (row[f.name] ?? "") : "";
@@ -827,8 +830,57 @@ function openCrudModal(entity, row) {
     return `<div class="mb-2"><label class="form-label small">${escapeHtml(f.label)}</label>${input}</div>`;
   }).join("");
   if (row) body.innerHTML += `<input type="hidden" data-crud-field="id" value="${row.id}"/>`;
+
+  const child = entity.children && entity.children[0];
+  if (child) {
+    const items = (row && row[child.collectionField]) || [];
+    body.innerHTML += `<div class="mb-2"><label class="form-label small">${escapeHtml(child.displayName)}</label>
+      <div class="table-responsive"><table class="table table-sm" id="crud-child-table"><thead><tr>
+        ${child.fields.filter(f => f.editable).map(f => `<th>${escapeHtml(f.label)}</th>`).join("")}<th></th>
+      </tr></thead><tbody id="crud-child-tbody"></tbody></table></div>
+      <button type="button" class="btn btn-sm btn-outline-secondary" id="crud-add-child-row">+ 添加行</button></div>`;
+    const tbody = body.querySelector("#crud-child-tbody");
+    const renderChildRow = (item, idx) => {
+      const cells = child.fields.filter(f => f.editable).map(f => {
+        const v = item[f.name] ?? "";
+        let inp = f.type === "number"
+          ? `<input type="number" class="form-control form-control-sm" data-crud-child="${idx}" data-crud-child-field="${f.name}" value="${v}"/>`
+          : `<input type="text" class="form-control form-control-sm" data-crud-child="${idx}" data-crud-child-field="${f.name}" value="${escapeHtml(String(v))}"/>`;
+        return `<td>${inp}</td>`;
+      }).join("");
+      return `<tr data-crud-child-idx="${idx}">${cells}<td><button type="button" class="btn btn-sm btn-outline-danger" data-crud-remove-child="${idx}">删</button></td></tr>`;
+    };
+    body.dataset.crudChildRows = JSON.stringify(items.map((it, i) => ({ ...it, _idx: i })));
+    body.querySelector("#crud-add-child-row").addEventListener("click", () => {
+      const rows = JSON.parse(body.dataset.crudChildRows || "[]");
+      rows.push({ _idx: rows.length });
+      body.dataset.crudChildRows = JSON.stringify(rows);
+      tbody.insertAdjacentHTML("beforeend", renderChildRow({}, rows.length - 1));
+      tbody.querySelectorAll("[data-crud-remove-child]").forEach(btn => {
+        if (btn._bound) return;
+        btn._bound = true;
+        btn.addEventListener("click", () => {
+          const idx = Number(btn.getAttribute("data-crud-remove-child"));
+          body.querySelector(`tr[data-crud-child-idx="${idx}"]`)?.remove();
+          const rows = JSON.parse(body.dataset.crudChildRows || "[]").filter((r, i) => i !== idx);
+          body.dataset.crudChildRows = JSON.stringify(rows.map((r, i) => ({ ...r, _idx: i })));
+        });
+      });
+    });
+    items.forEach((item, idx) => tbody.insertAdjacentHTML("beforeend", renderChildRow(item, idx)));
+    tbody.querySelectorAll("[data-crud-remove-child]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const idx = Number(btn.getAttribute("data-crud-remove-child"));
+        body.querySelector(`tr[data-crud-child-idx="${idx}"]`)?.remove();
+        const rows = JSON.parse(body.dataset.crudChildRows || "[]").filter((r, i) => i !== idx);
+        body.dataset.crudChildRows = JSON.stringify(rows.map((r, i) => ({ ...r, _idx: i })));
+      });
+    });
+  }
+
   body.dataset.crudApiPath = entity.apiPath;
   body.dataset.crudIsEdit = isEdit ? "1" : "0";
+  body.dataset.crudHasChildren = child ? "1" : "0";
   showModal("modal-crud");
 }
 
@@ -836,6 +888,7 @@ async function saveCrud() {
   const body = $("#modal-crud-body");
   const apiPath = body.dataset.crudApiPath;
   const isEdit = body.dataset.crudIsEdit === "1";
+  const hasChildren = body.dataset.crudHasChildren === "1";
   const payload = {};
   body.querySelectorAll("[data-crud-field]").forEach(el => {
     const name = el.getAttribute("data-crud-field");
@@ -843,6 +896,22 @@ async function saveCrud() {
     else if (el.type === "number") payload[name] = el.value === "" ? null : Number(el.value);
     else payload[name] = el.value === "" ? null : el.value;
   });
+
+  if (hasChildren && currentCrudEntity && currentCrudEntity.children && currentCrudEntity.children[0]) {
+    const child = currentCrudEntity.children[0];
+    const childRows = [];
+    body.querySelectorAll("tr[data-crud-child-idx]").forEach(tr => {
+      const item = {};
+      tr.querySelectorAll("[data-crud-child-field]").forEach(inp => {
+        const fn = inp.getAttribute("data-crud-child-field");
+        if (inp.type === "number") item[fn] = inp.value === "" ? null : Number(inp.value);
+        else item[fn] = inp.value === "" ? null : inp.value;
+      });
+      childRows.push(item);
+    });
+    payload[child.collectionField] = childRows;
+  }
+
   try {
     if (isEdit) {
       await apiPutJson(`/api/crud/${apiPath}/${payload.id}`, payload);
